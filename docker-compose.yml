@@ -1,0 +1,472 @@
+---
+version: "3.3"
+services:
+
+  ff3:
+    image: jc5x/firefly-iii:latest
+    container_name: ff3
+    volumes:
+      - ${docker_data_path}/firefly/firefly_iii_upload:/var/www/firefly-iii/storage/upload
+    env_file: firefly.env
+    expose:
+      - 80
+    depends_on:
+      - mysql
+    environment:
+      - MYSQL_RANDOM_ROOT_PASSWORD=
+      - MYSQL_USER=
+      - MYSQL_PASSWORD=
+      - MYSQL_DATABASE=
+    volumes:
+      - ${docker_data_path}/firefly/firefly_iii_db:/var/lib/mysql
+
+
+  mango:
+    image: hkalexling/mango
+    container_name: mango
+    expose:
+      - 9000
+    environment:
+      - VIRTUAL_PORT=9000
+      - VIRTUAL_HOST=manga.home.server
+    volumes:
+      - ${docker_data_path}/mango/root:/root/mango
+      - ${docker_data_path}/mango/.config:/root/.config/mango
+      - /mnt/hdd1/mangas:/root/mango/library
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    expose:
+      - 9090
+    environment:
+      - VIRTUAL_PORT=9090
+      - VIRTUAL_HOST=prom.home.server
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+    - ${docker_data_path}/prometheus:/etc/prometheus:ro
+    depends_on:
+    - cadvisor
+
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:latest
+    container_name: cadvisor
+    expose:
+    - 8080
+    environment:
+      - VIRTUAL_PORT=8080
+      - VIRTUAL_HOST=cadvisor.home.server
+    volumes:
+    - /:/rootfs:ro
+    - /var/run:/var/run:rw
+    - /sys:/sys:ro
+    - /var/lib/docker/:/var/lib/docker:ro
+    depends_on:
+    - redis
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    expose:
+    - 6379
+    environment:
+      - VIRTUAL_PORT=6379
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: always
+    expose:
+      - 3000
+    environment:
+      - VIRTUAL_PORT=3000
+      - VIRTUAL_HOST=grafana.home.server
+    volumes:
+      - ${docker_data_path}/grafana:/vol01/Docker/monitoring
+
+#  webmin:
+#    image: chsliu/docker-webmin:latest
+#    container_name: webmin
+#    expose:
+#      - 10000
+#    restart: unless-stopped
+    #environment:
+     
+
+#  navidrome:
+#    image: deluan/navidrome:latest
+#    container_name: navidrome
+#    user: 1000:1002
+# should be owner of volumes
+#    expose:
+#      - 4533
+#    restart: unless-stopped
+#    environment:
+      # Optional: put your config options customization here. Examples:
+#      ND_SCANINTERVAL: 1m
+#      ND_LOGLEVEL: debug
+#      ND_SESSIONTIMEOUT: 24h
+#      ND_BASEURL: ""
+#      ND_DATAFOLDER: "/home/ishan/navidrome/data"
+#      VIRTUAL_HOST: songs.home.server
+#    volumes:
+#      - /home/ishan/navidrome/data:/data
+#      - /mnt/hdd2/music:/music:ro
+
+
+  ghost:
+    image: ghost:3.28.0-alpine
+    container_name: ghost
+    restart: always
+    depends_on:
+      - mysql
+    environment:
+      url: https://ghost.home.server
+      database__client: mysql
+      database__connection__host: 
+      database__connection__user: 
+      database__connection__password: 
+      database__connection__database: 
+      VIRTUAL_HOST: ghost.home.server
+    volumes:
+      - ${docker_data_path}/ghost:/var/lib/ghost/content
+
+
+  jackett:
+    image: linuxserver/jackett:amd64-v0.16.922-ls12
+    container_name: jackett
+    environment:
+      - PUID={PUID}
+      - PGID={PGID}
+      - TZ={TZ}
+      - VIRTUAL_HOST=jackett.home.server
+    volumes:
+      - ${docker_data_path}/jackett/config:/config
+      - ${docker_data_path}/jackett/downloads:/downloads
+    expose:
+      - 9117
+    restart: always
+
+
+  sonarr:
+    image: linuxserver/sonarr:amd64-2.0.0.5344-ls73
+    container_name: sonarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK_SET=022 #optional
+      - VIRTUAL_HOST=sonarr.home.server
+    volumes:
+      - ${docker_data_path}/sonarr:/config
+      - /mnt:/mnt
+    expose:
+      - 8989
+    restart: always
+
+
+  bitwarden:
+    image: bitwardenrs/server:latest
+    container_name: bitwarden
+    restart: always
+    volumes:
+      - ${docker_data_path}/bitwarden:/data
+    expose:
+      - 80
+      - 443
+    environment:
+     - WEBSOCKET_ENABLED=true
+     - LOG_FILE=/data/logs/bitwarden.log
+     - EXTENDED_LOGGING=true
+     - LOG_LEVEL=warn
+     - VIRTUAL_HOST=bitwarden.home.server
+     - HTTPS_METHOD=redirect
+     
+  jellyfin:
+    image: linuxserver/jellyfin
+    container_name: jellyfin
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK_SET=022
+      - VIRTUAL_HOST=media.home.server
+      - VIRTUAL_PORT=8096
+      - HTTPS_METHOD=nohttps
+    volumes:
+      - ${docker_data_path}/jellyfin:/config
+      - /mnt/hdd1/tv:/data/tvshows
+      - /mnt/hdd1/movies:/data/movies
+      - /mnt/hdd1/anime:/data/anime
+      - ${docker_data_path}/jellyfin/var/lib/jellyfin:/var/lib/jellyfin
+    expose:
+      - 8096
+    restart: always
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:14.2.5.99202004250119-7015-2c65b79ubuntu18.04.1-ls84
+    container_name: qbittorrent
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK_SET=022
+      - WEBUI_PORT=8080
+      - VIRTUAL_PORT=8080
+      - VIRTUAL_HOST=${TORRENT_VHOST}
+    volumes:
+      - ${docker_data_path}/qb/config:/config
+      - ${docker_data_path}/qb/downloads:/downloads
+      - /mnt/hdd1:/hdd1
+      - /mnt/hdd2:/hdd2
+    expose:
+      - 8080
+    restart: always
+
+
+# Filebot
+  filebot:
+    image: jlesage/filebot:v1.9.2
+    hostname: filebot
+    container_name: filebot
+    env_file:
+      - ${ENVFILE}
+    volumes:
+      - "${docker_data_path}/filebot:/config:rw"
+      - "/mnt:/storage:rw"  
+    environment:
+      - VIRTUAL_HOST=${FILEBOT_VHOST}
+      - VIRTUAL_PORT=5800
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - KEEP_APP_RUNNING=1
+      - USER_ID=1000
+      - GROUP_ID=1002
+      - APP_NICENESS=1
+    expose:
+      - 5800
+      - 80
+    restart: always
+
+#Organizr
+#  organizr:
+#    image: linuxserver/organizr
+#    hostname: organizr
+#    container_name: organizr
+#    env_file:
+#      - ${ENVFILE}
+#    environment:
+#      - PUID=${PUID}
+#      - PGID=${PGID}
+#      - TZ=${TZ}
+#      - VIRTUAL_HOST=${ORGANIZER_VHOST}
+#      - HTTPS_METHOD=redirect
+#    volumes:
+#      - ${docker_data_path}/organizr/config:/config
+#    restart: always
+#    expose:
+#      - 443
+      
+
+# Portainer
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    hostname: portainer
+    command: -H unix:///var/run/docker.sock
+    env_file:
+      - ${ENVFILE}
+    environment:
+      - TZ=${TZ}
+      - VIRTUAL_HOST=${PORTAINER_VHOST}
+    expose:
+      - 9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${docker_data_path}/portainer/:/data
+    restart: always
+
+
+
+#Heimdall
+  heimdall:
+    image: linuxserver/heimdall
+    container_name: heimdall
+    hostname: heimdall
+    env_file:
+      - ${ENVFILE}
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - VIRTUAL_HOST=${HEIMDALL_VHOST}
+      - HTTPS_METHOD=nohttp
+    volumes:
+      - ${docker_data_path}/heimdall/config:/config
+    expose:
+      - 443
+    restart: always
+
+#Code-server
+  code-server:
+    image: linuxserver/code-server
+    container_name: code-server
+    env_file:
+      - ${ENVFILE}
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - VIRTUAL_HOST=${VSCODE_VHOST}
+      - VIRTUAL_PORT=8443
+      - PASSWORD=alohomora
+      - HTTPS_METHOD=redirect
+      - SUDO_PASSWORD=password
+    volumes:
+      - ${docker_data_path}/code-server/config:/config
+      - ${docker_data_path}/ghost/themes:/config/workspace/ghost/themes
+    expose:
+      - 8443
+    restart: always
+
+#dummy container
+#  someserviceonhost:
+#    container_name: hexo
+#    restart: always
+#    image: qoomon/docker-host
+#    cap_add: [ 'NET_ADMIN', 'NET_RAW' ]
+#    expose:
+#      - 4444
+#    environment:
+#      - VIRTUAL_HOST=${HEXO_VHOST}
+
+#dummy container
+#  plex:
+#    container_name: plex
+#    restart: always
+#    image: qoomon/docker-host
+#    cap_add: [ 'NET_ADMIN', 'NET_RAW' ]
+#    expose:
+#      - 32400
+#      - 80
+#      - 443
+#    environment:
+#      - VIRTUAL_HOST=plex.home.server
+#      - VIRTUAL_PORT=32400
+
+
+#Piwigo
+  piwigo:
+    image: linuxserver/piwigo
+    container_name: piwigo
+    links:
+      - mysql
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - VIRTUAL_HOST=${PIWIGO_VHOST}
+      - VIRTUAL_PROTO=https
+      - VIRTUAL_PORT=443
+    volumes:
+      - ${docker_data_path}/piwigo:/config
+      - /mnt/hdd2/photos:/config/www/gallery/galleries
+    expose:
+      - 443
+    restart: always
+
+#mysql
+  mysql:
+    image: mysql:5.7.30
+    container_name: mysql
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
+    env_file:
+      - ${ENVFILE}
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - MYSQL_ROOT_PASSWORD=
+      - MYSQL_DATABASE=
+      - MYSQL_USER=
+      - MYSQL_PASSWORD=
+      - MYSQL_ALLOW_EMPTY_PASSWORD=
+      - VIRTUAL_PORT=3306
+      - VIRTUAL_PORT=33060
+      - MYSQL_RANDOM_ROOT_PASSWORD=
+      - VIRTUAL_HOST=db.home.server
+    volumes:
+      - ${docker_data_path}/mysql:/var/lib/mysql
+    expose:
+      - 3306
+      - 33060
+      - 80
+
+#Nextcloud
+  nextcloud:
+    image: linuxserver/nextcloud
+    container_name: nextcloud
+    links:
+      - mysql
+    env_file:  
+      - ${ENVFILE}
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - VIRTUAL_HOST=${NC_VHOST}
+      - VIRTUAL_PORT=443
+      - VIRTUAL_PROTO=https
+    volumes:
+      - ${docker_data_path}/nextcloud/config:/config
+      - ${docker_data_path}/nextcloud/data:/data
+      - /mnt:/mnt
+    expose:
+      - 443
+    restart: always
+
+#Airsonic
+  airsonic:
+    image: linuxserver/airsonic:v10.6.2-ls71
+    container_name: airsonic
+    env_file:
+      - ${ENVFILE}
+    environment:
+      - PUID=1000
+      - PGID=1002
+      - TZ=Europe/London
+      - CONTEXT_PATH=/media
+      - JAVA_OPTS=-Dserver.use-forward-headers=true
+      - VIRTUAL_PORT=4040
+      - VIRTUAL_HOST=music.home.server
+    volumes:
+      - ${docker_data_path}/airsonic/config:/config
+      - /mnt/hdd2/music:/media
+    expose:
+      - 4040
+    restart: always
+
+#Nginx-reverse-proxy
+  nginx-proxy:
+    image: jwilder/nginx-proxy
+    hostname: nginx-proxy
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ${docker_data_path}/nginx-proxy/conf.d:/etc/nginx/conf.d
+      - ${docker_data_path}/nginx-proxy/certs:/etc/nginx/certs
+      - ${docker_data_path}/nginx-proxy/vhost.d:/etc/nginx/vhost.d
+    restart: always
+    environment:
+      - HTTPS_METHOD=redirect
+       
+#Common network config for reverse proxy to work
+networks:
+  default:
+    external:
+      name: reverse-proxy
