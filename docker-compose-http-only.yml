@@ -1,0 +1,459 @@
+---
+version: "3.3"
+services:
+
+#Plex
+#  plex:
+#    image: ghcr.io/linuxserver/plex
+#    container_name: plex
+#    environment:
+#      - PUID=$PUID
+#      - PGID=$PGID
+#      - VERSION=docker
+#      - VIRTUAL_HOST=$PLEX_VHOST
+#      - VIRTUAL_PORT=32400
+#    volumes:
+#      - $DCDATA/plex:/config
+#      - $TV_FOLDER:/tv
+#      - $MOVIES_FOLDER:/movies
+#    expose:
+#      - 32400
+#      - 80
+#    restart: always
+
+
+#Jenkins
+  jenkins:
+    image: jenkins/jenkins:2.284
+    container_name: jenkins
+    user: root
+    environment:
+      - PUID=$PUID
+      - PGID=$PGID
+      - TZ=$TZ
+      - VIRTUAL_HOST=$JENKINS_VHOST
+      - VIRTUAL_PROTO=http
+      - VIRTUAL_PORT=8080
+      - JENKINS_PASSWORD=password
+    expose:
+      - 50000
+      - 8080
+    volumes:
+      - $DCDATA/jenkins:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/local/bin/docker:/usr/local/bin/docker
+
+
+#Airsonic
+  airsonicadvanced:
+    image: airsonicadvanced/airsonic-advanced:latest
+    container_name: airsonicadvanced
+    environment:
+      - PUID=$PUID
+      - PGID=$PGID
+      - TZ=$TZ
+      - VIRTUAL_PORT=4040
+      - VIRTUAL_HOST=$AIRSONIC_VHOST
+      - VIRTUAL_PROTO=http
+      - CONTEXT_PATH=/media
+      - JAVA_OPTS=-Dserver.use-forward-headers=true
+    volumes:
+      - $MUSIC_FOLDER:/var/music
+      - $DCDATA/airsonicadvanced/config:/var/airsonic
+    restart: unless-stopped
+
+
+#Homer
+  homer:
+    image: b4bz/homer
+    container_name: homer
+    volumes:
+      - $DCDATA/homer/:/www/assets
+    environment:
+      - VIRTUAL_HOST=home.server
+      - UID=${PUID}
+      - GID=${PGID}
+      - HTTPS_METHOD=nohttps
+    expose:
+      - 8080
+    restart: unless-stopped
+
+
+#Firefly3
+  ff3:
+    image: jc5x/firefly-iii:latest
+    container_name: ff3
+    volumes:
+      - /home/ishan/data/firefly/firefly_iii_upload:/var/www/firefly-iii/storage/upload
+    env_file: firefly.env
+    expose:
+      - 80
+    depends_on:
+      - mysql
+    environment:
+      - MYSQL_RANDOM_ROOT_PASSWORD=no
+      - MYSQL_USER=$MYSQL_USER
+      - MYSQL_PASSWORD=$MYSQL_PASSWORD
+      - MYSQL_DATABASE=firefly
+    volumes:
+      - $DCDATA/firefly/firefly_iii_db:/var/lib/mysql
+
+#Mango
+  mango:
+    image: hkalexling/mango
+    container_name: mango
+    expose:
+      - 9000
+    environment:
+      - VIRTUAL_PORT=9000
+      - VIRTUAL_HOST=$MANGO_VHOST
+    volumes:
+      - $DCDATA/mango/root:/root/mango
+      - $DCDATA/mango/.config:/root/.config/mango
+      - $MANGA_FOLDER:/root/mango/library
+
+#Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    expose:
+      - 9090
+    environment:
+      - VIRTUAL_PORT=9090
+      - VIRTUAL_HOST=prom.home.server
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+    - /home/ishan/data/prometheus:/etc/prometheus:ro
+    depends_on:
+    - cadvisor
+
+#Cadvisor
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:latest
+    container_name: cadvisor
+    expose:
+    - 8080
+    environment:
+      - VIRTUAL_PORT=8080
+      - VIRTUAL_HOST=cadvisor.home.server
+    volumes:
+    - /:/rootfs:ro
+    - /var/run:/var/run:rw
+    - /sys:/sys:ro
+    - /var/lib/docker/:/var/lib/docker:ro
+    depends_on:
+    - redis
+
+#Redis
+  redis:
+    image: redis:latest
+    container_name: redis
+    expose:
+    - 6379
+    environment:
+      - VIRTUAL_PORT=6379
+
+#Grafana
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: always
+    expose:
+      - 3000
+    environment:
+      - VIRTUAL_PORT=3000
+      - VIRTUAL_HOST=grafana.home.server
+    volumes:
+      - /home/ishan/data/grafana:/vol01/Docker/monitoring
+
+#  webmin:
+#    image: chsliu/docker-webmin:latest
+#    container_name: webmin
+#    expose:
+#      - 10000
+#    restart: unless-stopped
+    #environment:
+
+
+#Jackett
+  jackett:
+    container_name: jackett
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun   
+    volumes:
+      - $DCDATA/jackett/config:/config
+      - $DCDATA/jackett/downloads:/downloads
+    environment:
+      - VPN_ENABLED=yes
+      - VPN_TYPE=openvpn
+      - LAN_NETWORK=192.168.0.1/24
+      - NAME_SERVERS=8.8.8.8,8.8.4.4
+      - PUID=$PUID
+      - PGID=$PGID
+      - WEBUI_PORT=9117
+      - UMASK=002
+      - VIRTUAL_HOST=$JACKETT_VHOST
+      - HEALTH_CHECK_HOST=8.8.8.8
+    expose:
+      - 9117
+    restart: always
+    image: dyonr/jackettvpn
+
+#Sonarr
+  sonarr:
+    image: linuxserver/sonarr:amd64-3.0.6.1196-ls104
+    container_name: sonarr
+    environment:
+      - PUID=$PUID
+      - PGID=$PGID
+      - TZ=$TZ
+      - UMASK_SET=022
+      - VIRTUAL_HOST=$SONARR_VHOST
+    volumes:
+      - $DCDATA/sonarr:/config
+      - /mnt:/mnt
+      - $DCDATA/qbt/downloads:/downloads
+    expose:
+      - 8989
+    restart: always
+
+
+#Bitwarden
+  bitwarden:
+    image: bitwardenrs/server:latest
+    container_name: bitwarden
+    restart: always
+    volumes:
+      - /home/ishan/data/bitwarden:/data
+    expose:
+      - 80
+      - 443
+    environment:
+     - WEBSOCKET_ENABLED=true
+     - LOG_FILE=/data/logs/bitwarden.log
+     - EXTENDED_LOGGING=true
+     - LOG_LEVEL=warn
+     - VIRTUAL_HOST=bitwarden.home.server
+     - HTTPS_METHOD=redirect
+
+#Jellyfin     
+  jellyfin:
+    image: linuxserver/jellyfin
+    container_name: jellyfin
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK_SET=022
+      - VIRTUAL_HOST=media.home.server
+      - VIRTUAL_PORT=8096
+      - HTTPS_METHOD=nohttps
+    volumes:
+      - /home/ishan/data/jellyfin:/config
+      - /mnt/hdd1/tv:/data/tvshows
+      - /mnt/hdd1/movies:/data/movies
+      - /mnt/hdd1/anime:/data/anime
+      - /home/ishan/data/jellyfin/var/lib/jellyfin:/var/lib/jellyfin
+    expose:
+      - 8096
+    restart: always
+
+
+#QBT
+  qbt:
+    image: markusmcnugen/qbittorrentvpn:latest
+    container_name: qbt
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - $DCDATA/qbt/config:/config
+      - $DCDATA/qbt/downloads:/downloads
+      - /mnt/hdd1:/hdd1
+      - /mnt/hdd2:/hdd2
+    environment:
+      - VPN_ENABLED=yes
+      - VPN_USERNAME=$VPN_USERNAME
+      - VPN_PASSWORD=$VPN_PASSWORD
+      - LAN_NETWORK=192.168.0.1/24
+      - NAME_SERVERS=8.8.8.8,8.8.4.4
+      - PUID=1000
+      - PGID=1002
+      - WEBUI_PORT=8080
+      - VIRTUAL_PORT=8080
+      - VIRTUAL_HOST=${TORRENT_VHOST}
+      - VPN_OPTIONS= --mute-replay-warnings --mssfix 1351
+      - UMASK=002
+    expose:
+      - 8080
+    devices:
+      - /dev/net/tun
+    restart: always
+
+# Filebot
+  filebot:
+    image: jlesage/filebot:v1.9.2
+    hostname: filebot
+    container_name: filebot
+    env_file:
+      - ${ENVFILE}
+    volumes:
+      - "/home/ishan/data/filebot:/config:rw"
+      - "/mnt:/storage:rw"  
+    environment:
+      - VIRTUAL_HOST=${FILEBOT_VHOST}
+      - VIRTUAL_PORT=5800
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - KEEP_APP_RUNNING=1
+      - USER_ID=1000
+      - GROUP_ID=1002
+      - APP_NICENESS=1
+    expose:
+      - 5800
+      - 80
+    restart: always
+
+# Portainer
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    hostname: portainer
+    command: -H unix:///var/run/docker.sock
+    env_file:
+      - ${ENVFILE}
+    environment:
+      - TZ=${TZ}
+      - VIRTUAL_HOST=${PORTAINER_VHOST}
+    expose:
+      - 9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/ishan/data/portainer/:/data
+    restart: always
+
+
+#Code-server
+  code-server:
+    image: linuxserver/code-server
+    container_name: code-server
+    env_file:
+      - ${ENVFILE}
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - VIRTUAL_HOST=${VSCODE_VHOST}
+      - VIRTUAL_PORT=8443
+      - PASSWORD=#####
+      - HTTPS_METHOD=redirect
+      - SUDO_PASSWORD=password
+    volumes:
+      - /home/ishan/data/code-server/config:/config
+      - /home/ishan/data/ghost/themes:/config/workspace/ghost/themes
+    expose:
+      - 8443
+    restart: always
+
+#dummy container
+#  someserviceonhost:
+#    container_name: hexo
+#    restart: always
+#    image: qoomon/docker-host
+#    cap_add: [ 'NET_ADMIN', 'NET_RAW' ]
+#    expose:
+#      - 4444
+#    environment:
+#      - VIRTUAL_HOST=${HEXO_VHOST}
+
+
+#dummy container
+#  plex:
+#    container_name: plex
+#    restart: always
+#    image: qoomon/docker-host
+#    cap_add: [ 'NET_ADMIN', 'NET_RAW' ]
+#    expose:
+#      - 32400
+#      - 80
+#      - 443
+#    environment:
+#      - VIRTUAL_HOST=plex.home.server
+#      - VIRTUAL_PORT=32400
+
+
+
+#mysql
+  mysql:
+    image: mysql:5.7.30
+    container_name: mysql
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
+    env_file:
+      - ${ENVFILE}
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
+      - MYSQL_DATABASE=ncdb
+      - MYSQL_USER=$MYSQL_USER
+      - MYSQL_PASSWORD=$MYSQL_PASSWORD
+      - MYSQL_ALLOW_EMPTY_PASSWORD=no
+      - VIRTUAL_PORT=3306
+      - VIRTUAL_PORT=33060
+      - MYSQL_RANDOM_ROOT_PASSWORD=no
+      - VIRTUAL_HOST=db.home.server
+    volumes:
+      - $DCDATA/mysql:/var/lib/mysql
+    expose:
+      - 3306
+      - 33060
+      - 80
+
+#Nextcloud
+#  nextcloud:
+#    image: linuxserver/nextcloud
+#    container_name: nextcloud
+#    links:
+#      - mysql
+#    env_file:  
+#      - ${ENVFILE}
+#    environment:
+#      - PUID=${PUID}
+#      - PGID=${PGID}
+#      - TZ=${TZ}
+#      - VIRTUAL_HOST=${NC_VHOST}
+#      - VIRTUAL_PORT=443
+#      - VIRTUAL_PROTO=https
+#    volumes:
+#      - /home/ishan/data/nextcloud/config:/config
+#      - /home/ishan/data/nextcloud/data:/data
+#      - /mnt:/mnt
+#    expose:
+#      - 443
+#    restart: always
+
+
+#Nginx-reverse-proxy
+  nginx-proxy:
+    image: jwilder/nginx-proxy
+    hostname: nginx
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - $DCDATA/nginx/conf.d:/etc/nginx/conf.d
+      - $DCDATA/nginx/vhost.d:/etc/nginx/vhost.d
+    restart: always
+    environment:
+      - HTTPS_METHOD=noredirect
+       
+#Common network config for reverse proxy to work
+networks:
+  default:
+    external:
+      name: reverse-proxy
